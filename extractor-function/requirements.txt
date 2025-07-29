@@ -1,0 +1,8 @@
+# 部署 API 的基礎框架
+Flask==3.0.3
+
+# extract.py 的依賴
+jieba==0.42.1
+transformers==4.41.2
+torch==2.3.0
+sentencepiece==0.2.0
