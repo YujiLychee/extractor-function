@@ -12,9 +12,9 @@ try:
     logging.info("Extractor API: 正在進行冷啟動初始化...")
     # 注意：這裡我們仍然需要 db 文件來初始化關鍵詞列表
     extractor = SmartNewsExtractor(use_bert=True, preload_db="property_translations.db")
-    logging.info("✅ Extractor API: 初始化完成。")
+    logging.info(" Extractor API: 初始化完成。")
 except Exception as e:
-    logging.error(f"❌ Extractor API: 初始化時發生嚴重錯誤: {e}")
+    logging.error(f" Extractor API: 初始化時發生嚴重錯誤: {e}")
     extractor = None
 
 # --- Google Cloud Function 入口函數 ---
