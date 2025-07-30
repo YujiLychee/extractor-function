@@ -1,6 +1,7 @@
 import sqlite3, jieba
 from pathlib import Path, PurePath
 from typing import List, Set
+import logging
 
 #   讀取 verified_translations 表，將 chinese_name 欄位返回為 set。
 def load_predefined_keywords(db_path: str = "property_translations.db") -> Set[str]:
