@@ -6,16 +6,14 @@ gunicorn==21.2.0
 requests==2.31.0
 numpy==1.24.3
 
-# NLP 依赖 (使用更稳定的版本)
+# NLP 依赖 (兼容 Python 3.9 的版本)
 jieba==0.42.1
-transformers==4.35.0
+transformers==4.30.0
 torch==2.0.1
 sentencepiece==0.2.0
-sentence-transformers==2.2.2
+sentence-transformers==2.1.0
+tokenizers==0.13.3
 
-# 可选依赖
+# 其他依赖
 scikit-learn==1.3.0
 pandas==2.0.3
-
-# 数据库相关
-sqlite3
