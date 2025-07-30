@@ -21,7 +21,6 @@ def init_extractor():
         db_path = "property_translations.db"
         if not os.path.exists(db_path):
             logging.warning(f"数据库文件 {db_path} 不存在，使用默认配置")
-            # 创建一个空的数据库或使用默认配置
         
         extractor = SmartNewsExtractor(use_bert=True, preload_db=db_path)
         logging.info(" Extractor API: 初始化完成。")
@@ -48,8 +47,6 @@ def extract_handler():
         }
         return ('', 204, headers)
 
-    headers = {'Access-Control-Allow-Origin': '*'}
-
     if not extractor:
         init_extractor()  # 重试初始化
         
@@ -72,9 +69,10 @@ def extract_handler():
         logging.error(f"提取过程中发生错误: {e}", exc_info=True)
         return jsonify({"error": "服务器内部提取错误。"}), 500
 
-# 初始化提取器
+# 在模块级别初始化（这很重要！）
 init_extractor()
 
+# 只有在直接运行时才使用 Flask 内置服务器
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port, debug=False)
