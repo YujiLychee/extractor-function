@@ -73,26 +73,78 @@ class SmartNewsExtractor:
         )
 
     # BERT模型初始化
-        self.use_bert = True
-        try:
-            from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
-            model_name = "ckiplab/bert-base-chinese-ner"
-            # 读取 Dockerfile 中设置的 HF_HOME / TRANSFORMERS_CACHE
-            cache_dir = os.getenv("HF_HOME", os.getenv("TRANSFORMERS_CACHE", None))
-            tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
-            model     = AutoModelForTokenClassification.from_pretrained(model_name, cache_dir=cache_dir)
-            # 用已加载好的 model/tokenizer，避免 pipeline 再次下载
-            self.ner_pipeline = pipeline(
-                "ner",
-                model=model,
-                tokenizer=tokenizer,
-                aggregation_strategy="simple",
-                device=-1
-            )
-            print("BERT NER 模型载入成功")
-        except Exception as e:
-            print(f"BERT 模型载入失败，切换到规则模式：{e}")
-            self.use_bert = False
+# BERT模型初始化
+        self.use_bert = use_bert
+        if use_bert:
+            try:
+                import os
+                import psutil
+                from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
+                
+                # 检查内存
+                memory = psutil.virtual_memory()
+                available_gb = memory.available / (1024**3)
+                logger.info(f"BERT加载前可用内存: {available_gb:.1f}GB")
+                
+                if available_gb < 1.0:
+                    logger.warning("内存不足，禁用BERT")
+                    self.use_bert = False
+                    self.ner_pipeline = None
+                    return
+                
+                model_name = "ckiplab/bert-base-chinese-ner"
+                cache_dir = os.getenv("HF_HOME", os.getenv("TRANSFORMERS_CACHE", "/app/cache"))
+                
+                logger.info(f"从缓存加载BERT模型: {cache_dir}")
+                
+                # 设置较短的超时时间
+                import time
+                start_time = time.time()
+                
+                # 检查缓存文件是否存在
+                model_cache_exists = os.path.exists(os.path.join(cache_dir, "models--ckiplab--bert-base-chinese-ner"))
+                logger.info(f"模型缓存存在: {model_cache_exists}")
+                
+                if not model_cache_exists:
+                    logger.warning("模型缓存不存在，禁用BERT")
+                    self.use_bert = False
+                    self.ner_pipeline = None
+                    return
+                
+                # 快速加载模式
+                tokenizer = AutoTokenizer.from_pretrained(
+                    model_name, 
+                    cache_dir=cache_dir,
+                    local_files_only=True  # 强制使用本地缓存
+                )
+                logger.info("Tokenizer 加载完成")
+                
+                model = AutoModelForTokenClassification.from_pretrained(
+                    model_name, 
+                    cache_dir=cache_dir,
+                    local_files_only=True  # 强制使用本地缓存
+                )
+                logger.info("Model 加载完成")
+                
+                # 创建pipeline
+                self.ner_pipeline = pipeline(
+                    "ner",
+                    model=model,
+                    tokenizer=tokenizer,
+                    aggregation_strategy="simple",
+                    device=-1,
+                    framework="pt"
+                )
+                
+                load_time = time.time() - start_time
+                logger.info(f"BERT NER 模型载入成功 (耗时: {load_time:.2f}秒)")
+                
+            except Exception as e:
+                logger.warning(f"BERT 模型载入失败，切换到规则模式: {e}")
+                self.use_bert = False
+                self.ner_pipeline = None
+        else:
+            logger.info("使用规则模式（BERT已禁用）")
             self.ner_pipeline = None
         
         # 專有名詞類型映射
