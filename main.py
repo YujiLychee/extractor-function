@@ -1,9 +1,13 @@
+# main.py
+
 from flask import Flask, request, jsonify
 from dataclasses import asdict
 import logging
 import os
 import threading
 import time
+
+from extract import SmartNewsExtractor  # 提前导入
 
 app = Flask(__name__)
 
@@ -17,40 +21,37 @@ _initialization_start_time = None
 
 def init_extractor_background():
     global extractor, _initialization_status, _initialization_start_time
-    
+
     with _initialization_lock:
         if _initialization_status != "pending":
             return
-        
+
         _initialization_status = "loading"
         _initialization_start_time = time.time()
         logger.info("开始后台初始化...")
-        
+
         try:
             logger.info(f"当前目录: {os.getcwd()}")
             logger.info(f"文件列表: {os.listdir('.')}")
-            
-            logger.info("导入 SmartNewsExtractor...")
-            from extract import SmartNewsExtractor
-            logger.info("导入成功")
-            
+
             db_path = "property_translations.db"
             if os.path.exists(db_path):
                 logger.info(f"数据库文件存在: {db_path}")
                 logger.info(f"数据库大小: {os.path.getsize(db_path)} bytes")
             else:
                 logger.warning(f"数据库文件不存在: {db_path}")
-            
-            logger.info("初始化 (use_bert=True)...")
+
+            # 一直启用 BERT
+            logger.info("初始化 SmartNewsExtractor (use_bert=True)...")
             extractor = SmartNewsExtractor(
                 use_bert=True,
                 preload_db=db_path
             )
-            
+
             load_time = time.time() - _initialization_start_time
             logger.info(f"初始化完成 (耗时: {load_time:.2f}秒)")
             _initialization_status = "ready"
-            
+
         except Exception as e:
             logger.error(f"初始化失败: {e}", exc_info=True)
             extractor = None
@@ -58,17 +59,17 @@ def init_extractor_background():
 
 def get_extractor_status():
     global _initialization_start_time
-    
+
     status_info = {
         "status": _initialization_status,
         "ready": _initialization_status == "ready",
         "extractor_available": extractor is not None
     }
-    
+
     if _initialization_start_time:
         elapsed = time.time() - _initialization_start_time
         status_info["loading_time"] = f"{elapsed:.1f}s"
-    
+
     return status_info
 
 @app.route('/')
@@ -76,7 +77,7 @@ def get_extractor_status():
 def health_check():
     status = get_extractor_status()
     return jsonify({
-        "status": "healthy", 
+        "status": "healthy",
         "service": "extractor-api",
         "bert_status": status["status"],
         "ready": status["ready"]
@@ -105,23 +106,17 @@ def extract_handler():
             "status": "initializing"
         }), 503
 
-    elif _initialization_status == "loading":
+    if _initialization_status == "loading":
         return jsonify({
             "error": "模型正在加载中，请稍后重试",
             "status": "loading",
             "estimated_wait": "30-60 seconds"
         }), 503
 
-    elif _initialization_status == "failed":
+    if _initialization_status == "failed" or not extractor:
         return jsonify({
-            "error": "模型加载失败",
+            "error": "模型加载失败或不可用",
             "status": "failed"
-        }), 500
-
-    elif not extractor:
-        return jsonify({
-            "error": "Extractor 不可用",
-            "status": "unavailable"
         }), 500
 
     request_json = request.get_json(silent=True)
@@ -134,11 +129,11 @@ def extract_handler():
             news_content=request_json['content'],
             title=request_json.get('title', '')
         )
-        
+
         result_dict = asdict(extraction_result)
         logger.info(f"提取完成: {len(extraction_result.property_candidates)} 个房产候选")
         return jsonify(result_dict), 200
-        
+
     except Exception as e:
         logger.error(f"提取过程中发生错误: {e}", exc_info=True)
         return jsonify({"error": f"服务器内部提取错误: {str(e)}"}), 500
