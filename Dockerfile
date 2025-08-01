@@ -17,8 +17,20 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-RUN python -c "from transformers import pipeline; pipeline('ner', model='ckiplab/bert-base-chinese-ner')"
-
+RUN python -c "
+import os
+print('开始下载BERT模型...')
+from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
+model_name = 'ckiplab/bert-base-chinese-ner'
+print(f'下载模型: {model_name}')
+tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir='/app/cache')
+print('Tokenizer下载完成')
+model = AutoModelForTokenClassification.from_pretrained(model_name, cache_dir='/app/cache')
+print('Model下载完成')
+# 测试pipeline创建
+pipeline('ner', model=model_name, tokenizer=model_name, cache_dir='/app/cache', device=-1)
+print('Pipeline测试成功，模型预下载完成!')
+"
 COPY . .
 
 EXPOSE 8080
