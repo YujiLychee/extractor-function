@@ -5,66 +5,72 @@ import os
 import threading
 import time
 
-# 创建 Flask 应用
 app = Flask(__name__)
 
-# --- 配置日志 ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 全局变量
 extractor = None
 _initialization_lock = threading.Lock()
-_initialization_status = "pending"  # pending, loading, ready, failed
+_initialization_status = "pending"
+_initialization_start_time = None
 
 def init_extractor_background():
-    """后台异步初始化提取器"""
-    global extractor, _initialization_status
+    global extractor, _initialization_status, _initialization_start_time
     
     with _initialization_lock:
         if _initialization_status != "pending":
             return
         
         _initialization_status = "loading"
-        logger.info("🚀 开始后台初始化 BERT Extractor...")
+        _initialization_start_time = time.time()
+        logger.info("开始后台初始化...")
         
         try:
-            # 动态导入
+            logger.info(f"当前目录: {os.getcwd()}")
+            logger.info(f"文件列表: {os.listdir('.')}")
+            
+            logger.info("导入 SmartNewsExtractor...")
             from extract import SmartNewsExtractor
+            logger.info("导入成功")
             
-            # 检查数据库文件
             db_path = "property_translations.db"
-            if not os.path.exists(db_path):
-                logger.warning(f"数据库文件 {db_path} 不存在，使用默认配置")
+            if os.path.exists(db_path):
+                logger.info(f"数据库文件存在: {db_path}")
+                logger.info(f"数据库大小: {os.path.getsize(db_path)} bytes")
+            else:
+                logger.warning(f"数据库文件不存在: {db_path}")
             
-            # 启动时间记录
-            start_time = time.time()
-            
-            # 使用轻量级 BERT 模型加快启动
+            logger.info("初始化 (use_bert=False)...")
             extractor = SmartNewsExtractor(
-                use_bert=True, 
-                preload_db=db_path,
-                # model_name="paraphrase-multilingual-MiniLM-L12-v2"  # 更小更快的模型
+                use_bert=False,
+                preload_db=db_path
             )
             
-            load_time = time.time() - start_time
-            logger.info(f" BERT Extractor 初始化完成 (耗时: {load_time:.2f}秒)")
+            load_time = time.time() - _initialization_start_time
+            logger.info(f"初始化完成 (耗时: {load_time:.2f}秒)")
             _initialization_status = "ready"
             
         except Exception as e:
-            logger.error(f" BERT Extractor 初始化失败: {e}", exc_info=True)
+            logger.error(f"初始化失败: {e}", exc_info=True)
             extractor = None
             _initialization_status = "failed"
 
 def get_extractor_status():
-    """获取提取器状态"""
-    return {
+    global _initialization_start_time
+    
+    status_info = {
         "status": _initialization_status,
         "ready": _initialization_status == "ready",
         "extractor_available": extractor is not None
     }
+    
+    if _initialization_start_time:
+        elapsed = time.time() - _initialization_start_time
+        status_info["loading_time"] = f"{elapsed:.1f}s"
+    
+    return status_info
 
-# 健康检查路由
 @app.route('/')
 @app.route('/health')
 def health_check():
@@ -76,15 +82,12 @@ def health_check():
         "ready": status["ready"]
     }), 200
 
-# 状态检查路由
 @app.route('/status')
 def status_check():
     return jsonify(get_extractor_status()), 200
 
-# 主要的提取路由
 @app.route('/extract', methods=['POST', 'OPTIONS'])
 def extract_handler():
-    # 处理 CORS 预检请求
     if request.method == 'OPTIONS':
         headers = {
             'Access-Control-Allow-Origin': '*',
@@ -96,7 +99,6 @@ def extract_handler():
 
     headers = {'Access-Control-Allow-Origin': '*'}
 
-    # 检查初始化状态
     if _initialization_status == "pending":
         return jsonify({
             "error": "服务正在启动中，请稍后重试",
@@ -105,14 +107,14 @@ def extract_handler():
 
     elif _initialization_status == "loading":
         return jsonify({
-            "error": "BERT 模型正在加载中，请稍后重试",
+            "error": "模型正在加载中，请稍后重试",
             "status": "loading",
             "estimated_wait": "30-60 seconds"
         }), 503
 
     elif _initialization_status == "failed":
         return jsonify({
-            "error": "BERT 模型加载失败",
+            "error": "模型加载失败",
             "status": "failed"
         }), 500
 
@@ -122,37 +124,31 @@ def extract_handler():
             "status": "unavailable"
         }), 500
 
-    # 验证请求
     request_json = request.get_json(silent=True)
     if not request_json or 'content' not in request_json:
         return jsonify({"error": "请求体必须是包含 'content' 键的 JSON"}), 400
 
     try:
-        # 执行提取
-        logger.info("开始执行 BERT 提取...")
+        logger.info("开始执行提取...")
         extraction_result = extractor.extract_candidates(
             news_content=request_json['content'],
             title=request_json.get('title', '')
         )
         
-        # 转换为字典
         result_dict = asdict(extraction_result)
-        logger.info("BERT 提取完成")
+        logger.info(f"提取完成: {len(extraction_result.property_candidates)} 个房产候选")
         return jsonify(result_dict), 200
         
     except Exception as e:
-        logger.error(f"BERT 提取过程中发生错误: {e}", exc_info=True)
+        logger.error(f"提取过程中发生错误: {e}", exc_info=True)
         return jsonify({"error": f"服务器内部提取错误: {str(e)}"}), 500
 
-# 启动后台初始化
 def start_background_initialization():
-    """启动后台初始化线程"""
     init_thread = threading.Thread(target=init_extractor_background)
     init_thread.daemon = True
     init_thread.start()
-    logger.info(" 已启动 BERT 后台初始化线程")
+    logger.info("已启动后台初始化线程")
 
-# 应用启动时开始后台初始化
 start_background_initialization()
 
 if __name__ == '__main__':
