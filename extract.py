@@ -1514,6 +1514,44 @@ class SmartNewsExtractor:
                 extraction_summary=extraction_summary,
             )
 
+    def extract_property_info(self, content: str, title: str = "") -> List[Dict]:
+        try:
+            result = self.extract_candidates(content, title)
+            
+            property_info = []
+            
+            for candidate in result.property_candidates:
+                property_info.append({
+                    'name': candidate.text,
+                    'type': 'property',
+                    'confidence': candidate.confidence,
+                    'method': candidate.extraction_method,
+                    'context': candidate.context[:100] if candidate.context else ""
+                })
+            
+            for candidate in result.location_candidates:
+                property_info.append({
+                    'name': candidate.text,
+                    'type': 'location',
+                    'confidence': candidate.confidence,
+                    'method': candidate.extraction_method,
+                    'context': candidate.context[:100] if candidate.context else ""
+                })
+            
+            for candidate in result.entity_candidates:
+                property_info.append({
+                    'name': candidate.text,
+                    'type': 'developer',
+                    'confidence': candidate.confidence,
+                    'method': candidate.extraction_method,
+                    'context': candidate.context[:100] if candidate.context else ""
+                })
+            
+            return property_info
+            
+        except Exception as e:
+            logging.error(f"extract_property_info 执行失败: {e}")
+            return []
 
     def _extract_location_property_after_qixia(self, segmented_words: List[Tuple[str, str, int]], qixia_index: int, content: str) -> Tuple[List[CandidateKeyword], List[CandidateKeyword]]:
         locations = []
