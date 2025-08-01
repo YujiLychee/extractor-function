@@ -17,6 +17,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+RUN python -c "from transformers import pipeline; pipeline('ner', model='ckiplab/bert-base-chinese-ner')"
+
 COPY . .
 
 EXPOSE 8080
