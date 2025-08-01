@@ -44,7 +44,7 @@ def init_extractor_background():
             extractor = SmartNewsExtractor(
                 use_bert=True, 
                 preload_db=db_path,
-                model_name="paraphrase-multilingual-MiniLM-L12-v2"  # 更小更快的模型
+                # model_name="paraphrase-multilingual-MiniLM-L12-v2"  # 更小更快的模型
             )
             
             load_time = time.time() - start_time
