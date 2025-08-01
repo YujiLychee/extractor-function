@@ -41,9 +41,9 @@ def init_extractor_background():
             else:
                 logger.warning(f"数据库文件不存在: {db_path}")
             
-            logger.info("初始化 (use_bert=False)...")
+            logger.info("初始化 (use_bert=True)...")
             extractor = SmartNewsExtractor(
-                use_bert=False,
+                use_bert=True,
                 preload_db=db_path
             )
             
