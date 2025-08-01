@@ -73,24 +73,27 @@ class SmartNewsExtractor:
         )
 
     # BERT模型初始化
-        self.use_bert = use_bert
-        if use_bert:
-            try:
-                from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
-                # 使用中文NER預訓練模型
-                model_name = "ckiplab/bert-base-chinese-ner"
-                self.ner_pipeline = pipeline(
-                    "ner",
-                    model=model_name,
-                    tokenizer=model_name,
-                    aggregation_strategy="simple",
-                    device=-1  # 使用CPU，如需GPU改為0
-                )
-                print("BERT NER模型載入成功")
-            except Exception as e:
-                print(f"BERT模型載入失敗，將使用規則方法: {e}")
-                self.use_bert = False
-                self.ner_pipeline = None
+        self.use_bert = True
+        try:
+            from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
+            model_name = "ckiplab/bert-base-chinese-ner"
+            # 读取 Dockerfile 中设置的 HF_HOME / TRANSFORMERS_CACHE
+            cache_dir = os.getenv("HF_HOME", os.getenv("TRANSFORMERS_CACHE", None))
+            tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
+            model     = AutoModelForTokenClassification.from_pretrained(model_name, cache_dir=cache_dir)
+            # 用已加载好的 model/tokenizer，避免 pipeline 再次下载
+            self.ner_pipeline = pipeline(
+                "ner",
+                model=model,
+                tokenizer=tokenizer,
+                aggregation_strategy="simple",
+                device=-1
+            )
+            print("BERT NER 模型载入成功")
+        except Exception as e:
+            print(f"BERT 模型载入失败，切换到规则模式：{e}")
+            self.use_bert = False
+            self.ner_pipeline = None
         
         # 專有名詞類型映射
         self.entity_type_mapping = {
