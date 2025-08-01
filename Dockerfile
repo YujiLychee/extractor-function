@@ -15,30 +15,43 @@ RUN apt-get update && apt-get install -y \
 # 创建缓存目录
 RUN mkdir -p /app/cache
 
-# 安装Python依赖
+# 安装 Python 依赖
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# 创建模型下载脚本
-RUN echo 'import os\n\
-print("开始下载BERT模型...")\n\
-try:\n\
-    from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline\n\
-    model_name = "ckiplab/bert-base-chinese-ner"\n\
-    cache_dir = "/app/cache"\n\
-    print(f"下载模型: {model_name}")\n\
-    tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=cache_dir)\n\
-    print("Tokenizer下载完成")\n\
-    model = AutoModelForTokenClassification.from_pretrained(model_name, cache_dir=cache_dir)\n\
-    print("Model下载完成")\n\
-    ner_pipeline = pipeline("ner", model=model_name, tokenizer=model_name, cache_dir=cache_dir, device=-1)\n\
-    print("Pipeline测试成功，模型预下载完成!")\n\
-except Exception as e:\n\
-    print(f"模型下载失败: {e}")\n\
-    print("将在运行时使用规则模式")' > download_model.py
+# 创建并测试模型下载脚本
+# （移除了 pipeline 的 cache_dir 参数）
+RUN cat > download_model.py << 'EOF'
+import os
+print("开始下载 BERT 模型...")
 
-# 执行模型下载
+try:
+    from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
+
+    model_name = "ckiplab/bert-base-chinese-ner"
+    cache_dir = os.getenv("HF_HOME", os.getenv("TRANSFORMERS_CACHE", None))
+
+    print(f"下载 tokenizer 和 model 到 {cache_dir}")
+    tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
+    print("Tokenizer 下载完成")
+    model     = AutoModelForTokenClassification.from_pretrained(model_name, cache_dir=cache_dir)
+    print("Model 下载完成")
+
+    # 不再传 cache_dir 给 pipeline
+    ner_pipeline = pipeline(
+        "ner",
+        model=model,
+        tokenizer=tokenizer,
+        aggregation_strategy="simple",
+        device=-1
+    )
+    print("Pipeline 测试成功，模型预下载完成!")
+except Exception as e:
+    print(f"模型下载失败: {e}")
+    print("将在运行时使用规则模式")
+EOF
+
 RUN python download_model.py
 
 # 复制应用代码
